@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <!-- Configuración básica del documento y codificación de caracteres -->
+    <meta charset="UTF-8">
+    <!-- Configuración del viewport para dispositivos móviles: evita el zoom manual (user-scalable=no) para mejorar la experiencia en AR -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AR.js - Controles Táctiles (Rotación)</title>
+    
+    <!-- Importación de A-Frame: framework principal basado en HTML para crear experiencias de realidad virtual/aumentada -->
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <!-- Importación de AR.js: biblioteca para Realidad Aumentada basada en la web (rastreo de marcadores, imágenes o ubicación) -->
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    
+    <!-- Importación de biblioteca externa para habilitar gestos táctiles (como rotar o escalar) en modelos 3D en AR.js -->
+    <script src="https://raw.githack.com/fcor/arjs-gestures/master/dist/gestures.js"></script>
+    <!-- Importación de A-Frame Extras para reproducir animaciones internas de modelos glTF (.glb) -->
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>
+
+    <style>
+        /* Elimina los márgenes del body, oculta el desbordamiento y establece un fondo negro */
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        
+        /* Ajuste forzado para la cámara: asegura que el feed de video del dispositivo ocupe el 100% de la pantalla sin deformarse */
+        video {
+            width: 100vw !important; height: 100vh !important;
+            top: 0 !important; left: 0 !important; object-fit: cover !important;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 
+      <a-scene>: Contenedor principal de la escena 3D en A-Frame.
+      - embedded: Permite incrustar la escena en la página de manera limpia sin sobrescribir todo el estilo.
+      - renderer: Configuraciones para mejorar la calidad visual (logarithmicDepthBuffer para manejo de profundidad, antialias para bordes más suaves y colorManagement para colores correctos).
+      - arjs: Configura el entorno AR (usa cámara web, define las resoluciones y desactiva la UI de depuración para la versión final).
+      - gesture-detector: Componente que escucha los eventos táctiles en la pantalla para la librería arjs-gestures.
+    -->
+    <a-scene 
+        embedded 
+        renderer="logarithmicDepthBuffer: true; antialias: true; colorManagement: true;"
+        arjs="sourceType: webcam; displayWidth: 1280; displayHeight: 720; sourceWidth: 1280; sourceHeight: 720; debugUIEnabled: false;"
+        gesture-detector>
+
+        <!-- Sección <a-assets>: Sistema de gestión de recursos. Ideal para precargar modelos 3D, imágenes, audios y mejorar el rendimiento. -->
+        <a-assets>
+            <a-asset-item id="miModelo" src="personaje.glb"></a-asset-item>
+            <!-- Precargamos el archivo de audio -->
+            <audio id="sonidoCohete" src="sonido.mp3" preload="auto"></audio>
+        </a-assets>
+
+        <!-- 
+          <a-marker>: Entidad que define el marcador físico que la cámara debe detectar para proyectar la escena 3D.
+          - type="pattern" y url: Indican que usará un marcador personalizado entrenado y la ruta a dicho archivo (pattern-nave.txt).
+          - smooth y smoothCount: Algoritmos de suavizado de cámara para reducir el parpadeo y temblor del modelo 3D.
+          - cursor="rayOrigin: mouse": Permite interceptar clics/toques en la pantalla (raycasting) para interactuar con los objetos de la escena.
+        -->
+        <a-marker 
+            type="pattern" 
+            url="pattern-nave.txt"
+            smooth="true"
+            smoothCount="10"
+            emitevents="true" 
+            cursor="fuse: false; rayOrigin: mouse"
+            id="marker-handler">
+
+            <!-- 
+              <a-entity>: Contenedor del modelo 3D.
+              - gltf-model: Llama al asset cargado previamente mediante su ID (#miModelo).
+              - scale, position, rotation: Posicionamiento y dimensiones iniciales del modelo en relación al marcador.
+              - class="clickable": Clase que identifica a este objeto para que interactúe con el cursor (raycaster).
+              - gesture-handler: Habilita la rotación y escalado táctil del modelo. rotationFactor ajusta la sensibilidad.
+            -->
+            <a-entity 
+                id="modelo3D"
+                gltf-model="#miModelo" 
+                scale="1 1 1" 
+                position="0 0 0" 
+                rotation="-90 0 0"
+                class="clickable"
+                gesture-handler="rotationFactor: 1"
+                animation-mixer="loop: repeat"
+                sound="src: #sonidoCohete; autoplay: true; loop: true; volume: 1">
+            </a-entity>
+
+        </a-marker>
+
+        <!-- Configuración de la iluminación en la escena -->
+        <!-- Luz ambiental: ilumina todos los objetos uniformemente, previene sombras completamente oscuras. -->
+        <a-entity light="type: ambient; intensity: 1.2;"></a-entity>
+        <!-- Luz direccional: simula una fuente de luz tipo Sol, aportando volumen y relieve al modelo. -->
+        <a-entity light="type: directional; intensity: 0.8;" position="1 4 3"></a-entity>
+
+        <!-- La cámara virtual de la escena. En AR, la posición de esta cámara es controlada automáticamente según el movimiento del teléfono. -->
+        <a-entity camera></a-entity>
+
+    </a-scene>
+
+    <script>
+        // Script para forzar enfoque automático (autofocus) en cámaras de dispositivos móviles
+        const scene = document.querySelector('a-scene');
+        
+        // Espera a que la escena de A-Frame termine de cargar completamente
+        scene.addEventListener('loaded', () => {
+            // Busca el elemento de video de HTML5 inyectado por AR.js que muestra el feed de la cámara
+            const video = document.querySelector('video');
+            
+            if (video && video.srcObject) {
+                // Obtiene la pista de video (video track) principal
+                const track = video.srcObject.getVideoTracks()[0];
+                
+                // Verifica si la cámara del dispositivo soporta el modo de 'enfoque continuo'
+                if (track.getCapabilities().focusMode?.includes('continuous')) {
+                    // Aplica la restricción de hardware para que la cámara no se desenfoque cuando te acercas o te alejas del marcador
+                    track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+                }
+            }
+        });
+    </script>
+</body>
+</html>
